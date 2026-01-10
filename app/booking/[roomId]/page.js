@@ -36,6 +36,7 @@ export default function BookingPage() {
   const [isCreatingBooking, setIsCreatingBooking] = useState(false);
 
   useEffect(() => {
+    // Check if user is logged in
     const storedUserId = localStorage.getItem('userId');
     if (!storedUserId) {
       router.push('/login');
@@ -67,6 +68,7 @@ export default function BookingPage() {
     };
     setFormData(newFormData);
 
+    // Calculate nights and price
     if (newFormData.checkInDate && newFormData.checkOutDate) {
       calculateBooking(newFormData);
     }
@@ -78,20 +80,15 @@ export default function BookingPage() {
 
     if (checkOut <= checkIn) {
       setError('Check-out date must be after check-in date');
-      setBookingSummary({
-        nights: 0,
-        roomPrice: room.price,
-        subtotal: 0,
-        discount: 0,
-        total: 0,
-      });
       return;
     }
 
     const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
     const subtotal = room.price * nights;
+
+    // If coupon is already validated, apply it
     const discount = couponValidation.isValid ? couponValidation.discount : 0;
-    const total = Math.max(subtotal - discount, 0);
+    const total = subtotal - discount;
 
     setBookingSummary({
       nights,
@@ -128,10 +125,11 @@ export default function BookingPage() {
       if (data.isValid) {
         setCouponValidation({
           isValid: true,
-          message: `✓ Coupon applied! ₹${data.discountAmount} discount`,
+          message: `Coupon applied! ₹${data.discountAmount} discount`,
           discount: data.discountAmount,
         });
 
+        // Recalculate with discount
         if (bookingSummary.nights > 0) {
           const newTotal = bookingSummary.subtotal - data.discountAmount;
           setBookingSummary(prev => ({
@@ -144,7 +142,7 @@ export default function BookingPage() {
     } catch (err) {
       setCouponValidation({
         isValid: false,
-        message: `✗ ${err.message || 'Invalid or expired coupon'}`,
+        message: err.message || 'Invalid or expired coupon',
         discount: 0,
       });
     }
@@ -162,7 +160,6 @@ export default function BookingPage() {
     }
 
     setIsCreatingBooking(true);
-    setError('');
 
     try {
       const response = await fetch('http://localhost:8081/api/bookings/room/create', {
@@ -179,12 +176,12 @@ export default function BookingPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create booking');
+        throw new Error('Failed to create booking');
       }
 
       const booking = await response.json();
 
+      // If coupon was applied, use it
       if (couponValidation.isValid && formData.couponCode) {
         try {
           await fetch(`http://localhost:8081/api/coupons/use/${formData.couponCode}`, {
@@ -195,7 +192,8 @@ export default function BookingPage() {
         }
       }
 
-      alert('✓ Booking created successfully! Proceeding to payment...');
+      alert('Booking created! Proceeding to payment...');
+      // Redirect to payment page
       router.push(`/payment/${booking.id}`);
     } catch (err) {
       setError(err.message || 'Failed to create booking');
@@ -242,7 +240,7 @@ export default function BookingPage() {
             <h3>Select Your Dates</h3>
 
             <div className="form-group">
-              <label>Check-in Date & Time</label>
+              <label>Check-in Date</label>
               <input
                 type="datetime-local"
                 name="checkInDate"
@@ -253,7 +251,7 @@ export default function BookingPage() {
             </div>
 
             <div className="form-group">
-              <label>Check-out Date & Time</label>
+              <label>Check-out Date</label>
               <input
                 type="datetime-local"
                 name="checkOutDate"
@@ -263,13 +261,7 @@ export default function BookingPage() {
               />
             </div>
 
-            {bookingSummary.nights > 0 && (
-              <div className="nights-info">
-                ✓ {bookingSummary.nights} night{bookingSummary.nights > 1 ? 's' : ''} selected
-              </div>
-            )}
-
-            <h3 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Apply Coupon Code</h3>
+            <h3 style={{ marginTop: '2rem' }}>Apply Coupon Code</h3>
 
             <div className="coupon-section">
               <div className="form-group">
@@ -300,6 +292,7 @@ export default function BookingPage() {
                     couponValidation.isValid ? 'valid' : 'invalid'
                   }`}
                 >
+                  {couponValidation.isValid ? '✓' : '✗'}{' '}
                   {couponValidation.message}
                 </div>
               )}
@@ -335,7 +328,7 @@ export default function BookingPage() {
               </div>
             )}
 
-            {bookingSummary.nights > 0 ? (
+            {bookingSummary.nights > 0 && (
               <>
                 <div className="summary-divider"></div>
 
@@ -373,13 +366,9 @@ export default function BookingPage() {
                   onClick={handleCreateBooking}
                   disabled={isCreatingBooking}
                 >
-                  {isCreatingBooking ? 'Creating Booking...' : '💳 Proceed to Payment'}
+                  {isCreatingBooking ? 'Creating Booking...' : 'Proceed to Payment'}
                 </button>
               </>
-            ) : (
-              <div className="empty-state">
-                <p>Select dates above to see booking summary</p>
-              </div>
             )}
           </div>
         </div>
@@ -508,16 +497,6 @@ export default function BookingPage() {
           box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
         }
 
-        .nights-info {
-          background: rgba(16, 185, 129, 0.1);
-          border: 1px solid #10b981;
-          color: #10b981;
-          padding: 0.75rem;
-          border-radius: 6px;
-          margin-bottom: 1rem;
-          font-weight: 600;
-        }
-
         .coupon-input-group {
           display: flex;
           gap: 1rem;
@@ -598,12 +577,6 @@ export default function BookingPage() {
           padding: 1rem;
           font-size: 1.1rem;
           margin-top: 1.5rem;
-        }
-
-        .empty-state {
-          text-align: center;
-          padding: 2rem;
-          color: #94a3b8;
         }
 
         button:disabled {
